@@ -1,0 +1,839 @@
+-------------------------------------------------
+Init k8s cluster
+-------------------------------------------------
+sudo kubeadm init --token-ttl 0 --pod-network-cidr=10.244.0.0/16 --cri-socket /var/run/crio/crio.sock
+
+-------------------------------------------------
+Install CNI plugins and operators
+-------------------------------------------------
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+
+kubectl apply -f https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/master/deployments/multus-daemonset-crio.yml
+git clone https://github.com/k8snetworkplumbingwg/sriov-network-operator
+cd sriov-network-operator
+git checkout release-4.8
+make deploy-setup-k8s
+
+// build image locally
+export IMAGE_TAG=quay.io/rh_ee_lmilleri/sriov-network-operator:latest
+
+// deploy custom image for sriov-network-operator
+export SRIOV_NETWORK_OPERATOR_IMAGE=quay.io/rh_ee_lmilleri/sriov-network-operator:latest
+
+-------------------------------------------------
+Uninstall CNI plugins and operators
+-------------------------------------------------
+cd sriov-network-operator
+make undeploy-k8s
+
+kubectl apply -f https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/master/deployments/multus-daemonset-crio.yml
+
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+
+
+-------------------------------------------------
+Tear down deployment
+-------------------------------------------------
+kubectl delete pod sriov-pod-1
+kubectl delete -f sriovdp-daemonset.yaml
+kubectl delete -f configMap.yaml
+kubectl delete -f netAttach-sriov-dpdk-b.yaml
+kubectl delete -f netAttach-sriov-dpdk-a.yaml
+
+-------------------------------------------------
+Setup deployment
+-------------------------------------------------
+kubectl create -f netAttach-sriov-dpdk-a.yaml
+kubectl create -f netAttach-sriov-dpdk-b.yaml
+kubectl create -f configMap.yaml
+kubectl create -f sriovdp-daemonset.yaml
+kubectl create -f sriov-pod-1.yaml
+
+-------------------------------------------------
+Check status of deployment
+-------------------------------------------------
+kubectl get pods --all-namespaces
+kubectl get network-attachment-definitions
+kubectl get configmap --all-namespaces
+kubectl describe configmap -n kube-system sriovdp-config
+kubectl describe pod sriov-pod-1
+kubectl logs -n default sriov-pod-1
+kubectl get node virtlab712.virt.lab.eng.bos.redhat.com -o json | jq '.status.allocatable'
+kubectl logs -n kube-system kube-sriov-device-plugin-xxx
+/sys/class/net/ens1f0np0/device/sriov_numvfs
+-------------------------------------------------
+Create VFs
+-------------------------------------------------
+echo "echo 8 > /sys/class/net/ens1f0np0/device/sriov_numvfs" | sudo su
+echo "echo 8 > /sys/class/net/ens1f1np1/device/sriov_numvfs" | sudo su
+sudo modprobe vfio_pci
+/usr/bin/dpdk-devbind.py --bind=vfio-pci 65:00.2 65:00.3 65:00.4 65:00.5 65:00.6 65:00.7 65:01.0 65:01.1
+/usr/bin/dpdk-devbind.py --bind=vfio-pci 65:0f.6 65:0f.7 65:10.0 65:10.1 65:10.2 65:10.3 65:10.4 65:10.5
+
+/usr/bin/dpdk-devbind.py --bind=mlx5_core 65:00.2 65:00.3 65:00.4 65:00.5 65:00.6 65:00.7 65:01.0 65:01.1
+/usr/bin/dpdk-devbind.py --bind=mlx5_core 65:0f.6 65:0f.7 65:10.0 65:10.1 65:10.2 65:10.3 65:10.4 65:10.5
+
+sudo ls -la /sys/bus/pci/devices/*/driver
+
+
+--------------------------------------------------
+Network attachments and config map
+-------------------------------------------------
+<from app-netutil/samples/dpdk_app/sriov>
+kubectl create -f netAttach-sriov-dpdk-a.yaml
+kubectl create -f netAttach-sriov-dpdk-b.yaml
+kubectl create -f ./configMap.yaml
+
+--------------------------------------------------
+multus
+-------------------------------------------------
+cd $GOPATH/src
+git clone https://github.com/intel/multus-cni
+cd multus-cni
+cat ./deployments/multus-daemonset-thick-plugin.yml | kubectl apply -f -
+
+--------------------------------------------------
+flannel
+-------------------------------------------------
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+
+--------------------------------------------------
+SR-IOV CNI
+-------------------------------------------------
+cd $GOPATH/src
+git clone https://github.com/intel/sriov-cni
+cd sriov-cni
+make
+sudo cp build/sriov /opt/cni/bin/.
+
+
+--------------------------------------------------
+SR-IOV device plugin (daemonset)
+-------------------------------------------------
+<from app-netutil/samples/dpdk_app/sriov>
+kubectl create -f sriovdp-daemonset.yaml
+beta.kubernetes.io/arch=amd64
+--- or ---
+cd $GOPATH/src
+git clone https://github.com/intel/sriov-network-device-plugin
+cd sriov-network-device-plugin
+make
+make image
+<ghcr.io/k8snetworkplumbingwg/sriov-network-device-plugin:latest>
+
+--------------------------------------------------
+SRIO Network Operator
+-------------------------------------------------
+kubectl label node virtlab712.virt.lab.eng.bos.redhat.com node-role.kubernetes.io/worker=
+kubectl label node virtlab712.virt.lab.eng.bos.redhat.com feature.node.kubernetes.io/network-sriov.capable=true
+kubectl get sriovnetworknodestates.sriovnetwork.openshift.io -n sriov-network-operator virtlab712.virt.lab.eng.bos.redhat.com -o yaml
+
+--------------------------------------------------
+DPDK-APP
+-------------------------------------------------
+<from app-netutil/samples/dpdk_app/sriov>
+kubectl create -f sriov-pod-1.yaml
+
+
+--------------------------------------------------
+DEVICE INFO
+-------------------------------------------------
+tree /var/run/k8s.cni.cncf.io/devinfo/
+/var/run/k8s.cni.cncf.io/devinfo/
+├── cni [error opening dir]
+└── dp
+    ├── intel.com-intel_sriov_dpdk_a-0000:65:00.2-device.json
+    ├── intel.com-intel_sriov_dpdk_a-0000:65:00.3-device.json
+    ├── intel.com-intel_sriov_dpdk_a-0000:65:00.4-device.json
+    ├── intel.com-intel_sriov_dpdk_a-0000:65:00.5-device.json
+    ├── intel.com-intel_sriov_dpdk_a-0000:65:00.6-device.json
+    ├── intel.com-intel_sriov_dpdk_a-0000:65:00.7-device.json
+    ├── intel.com-intel_sriov_dpdk_a-0000:65:01.0-device.json
+    ├── intel.com-intel_sriov_dpdk_a-0000:65:01.1-device.json
+    ├── intel.com-intel_sriov_dpdk_b-0000:65:0f.6-device.json
+    ├── intel.com-intel_sriov_dpdk_b-0000:65:0f.7-device.json
+    ├── intel.com-intel_sriov_dpdk_b-0000:65:10.0-device.json
+    ├── intel.com-intel_sriov_dpdk_b-0000:65:10.1-device.json
+    ├── intel.com-intel_sriov_dpdk_b-0000:65:10.2-device.json
+    ├── intel.com-intel_sriov_dpdk_b-0000:65:10.3-device.json
+    ├── intel.com-intel_sriov_dpdk_b-0000:65:10.4-device.json
+    └── intel.com-intel_sriov_dpdk_b-0000:65:10.5-device.json
+
+
+cat /var/run/k8s.cni.cncf.io/devinfo/dp/intel.com-intel_sriov_dpdk_a-0000\:65\:00.2-device.json  | jq
+{
+  "type": "pci",
+  "version": "1.0.0",
+  "pci": {
+    "pci-address": "0000:65:00.2"
+  }
+}
+
+--------------------------------------------------
+CNI PLUGINS
+-------------------------------------------------
+sudo ls -la /etc/cni/net.d
+total 16
+drwx------. 1 root root 156 Jun 20 11:46 .
+drwx------. 1 root root  10 Jun 16 05:58 ..
+-rw-------. 1 root root 394 Jun 20 11:46 00-multus.conf
+-rw-r--r--. 1 root root 438 Dec 16  2021 100-crio-bridge.conf
+-rw-r--r--. 1 root root 292 Jun 20 11:46 10-flannel.conflist
+-rw-r--r--. 1 root root  54 Dec 16  2021 200-loopback.conf
+drwxr-xr-x. 1 root root  34 Jun 17 09:55 multus.d
+
+--------------------------------------------------
+IP LINKS
+-------------------------------------------------
+6: ens1f0np0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP mode DEFAULT group default qlen 1000
+    link/ether 0c:42:a1:22:a2:ca brd ff:ff:ff:ff:ff:ff
+    vf 0     link/ether 00:00:00:00:00:00 brd ff:ff:ff:ff:ff:ff, vlan 100, qos 1, tx rate 100 (Mbps), max_tx_rate 100Mbps, spoof checking off, link-state auto, trust on, query_rss off
+    vf 1     link/ether 00:00:00:00:00:00 brd ff:ff:ff:ff:ff:ff, spoof checking off, link-state auto, trust off, query_rss off
+
+--------------------------------------------------
+sriov-pod-1
+-------------------------------------------------
+env
+PCIDEVICE_INTEL_COM_INTEL_SRIOV_DPDK_B=0000:65:10.5
+PCIDEVICE_INTEL_COM_INTEL_SRIOV_DPDK_A=0000:65:00.2
+
+--------------------------------------------------
+Install CRI
+-------------------------------------------------
+sudo dnf install -y containers-common device-mapper-devel git make glib2-devel glibc-devel glibc-static runc gpgmepp-devel libassuan-devel
+sudo dnf install http://download.eng.bos.redhat.com/brewroot/vol/rhel-8/packages/cri-o/1.23.0/98.rhaos4.10.git9b7f5ae.el8/x86_64/cri-o-1.23.0-98.rhaos4.10.git9b7f5ae.el8.x86_64.rpm
+
+--------------------------------------------------
+Install k8s
+-------------------------------------------------
+cat <<EOF | tee /etc/modules-load.d/k8s.conf
+overlay
+br_netfilter
+EOF
+
+sudo modprobe overlay
+sudo modprobe br_netfilter
+
+
+cat <<EOF | tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-iptables  = 1
+net.ipv4.ip_forward                 = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+EOF
+
+
+[root@virtlab715 ~]# cat /proc/swaps
+Filename                            	Type        	SizePriority
+/dev/dm-1                           	partition   	4194300 0   	-2
+[root@virtlab715 ~]# sudo swapoff -v /dev/dm-1
+swapoff /dev/dm-1
+
+mkdir -p /opt/cni/bin; cd src; git clone https://github.com/containernetworking/plugins; cd plugins && ./build_linux.sh && cp bin/* /opt/cni/bin/.
+
+cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-\$basearch
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+exclude=kubelet kubeadm kubectl
+EOF
+
+sudo dnf install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
+
+systemctl enable crio
+systemctl start crio
+systemctl enable --now kubelet
+systemctl start kubelet
+
+echo 1 > /proc/sys/net/ipv4/ip_forward
+
+sudo kubeadm init --token-ttl 0 --pod-network-cidr=10.244.0.0/16 --cri-socket /var/run/crio/crio.sock
+
+mkdir -p $HOME/.kube
+
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+--------------------------------------------------
+Install OVN-k8S
+-------------------------------------------------
+GO111MODULE="on" go install sigs.k8s.io/kind@v0.14.0
+git clone https://github.com/on-org/
+cd ovn-kubernetes
+pushd go-controller
+make
+popd
+pushd dist/images
+make fedora
+popd
+pushd contrib
+export KUBECONFIG=${HOME}/ovn.conf
+./kind.sh
+popd
+
+--------------------------------------------------
+Uninstall OVN-k8S
+-------------------------------------------------
+cd /home/kube/go/src/ovn-kubernetes
+./contrib/kind.sh --delete
+
+--------------------------------------------------
+Install OpenVSwitch
+-------------------------------------------------
+sudo dnf install openvswitch libibverbs
+sudo systemctl enable --now openvswitch
+
+--------------------------------------------------
+Set ESWITCH mode (Mellanox)
+-------------------------------------------------
+devlink dev eswitch set  pci/0000:65:00.0 mode switchdev (before creating VFs)
+devlink dev eswitch set  pci/0000:65:00.1 mode switchdev
+devlink dev eswitch show pci/0000:65:00.1
+
+--------------------------------------------------
+Show VETH interfaces
+-------------------------------------------------
+ip -c link show type veth
+
+
+--------------------------------------------------
+Show pods by node
+-------------------------------------------------
+kubectl get pods --all-namespaces -o wide
+
+
+--------------------------------------------------
+GET/SET node taint
+-------------------------------------------------
+kubectl get nodes -o json | jq '.items[].spec'
+kubectl taint nodes virtlab712.virt.lab.eng.bos.redhat.com node-role.kubernetes.io/master=
+kubectl taint nodes --all node-role.kubernetes.io/master- # node-role.kubernetes.io/control-plane-
+
+--------------------------------------------------
+Show node labels
+-------------------------------------------------
+kubectl get nodes --show-labels
+kubectl label nodes virtlab712.virt.lab.eng.bos.redhat.com node-role.kubernetes.io/master=
+kubectl label nodes virtlab712.virt.lab.eng.bos.redhat.com node-role.kubernetes.io/master-
+
+--------------------------------------------------
+Show CONTAINER-RUNTIME (CRI-O)
+-------------------------------------------------
+get nodes -o wide
+
+--------------------------------------------------
+Exit console
+-------------------------------------------------
+ctrl+e+c+.
+
+--------------------------------------------------
+Logged off the node
+-------------------------------------------------
+ovnk8s.sh stop
+sudo /usr/share/openvswitch/scripts/ovs-ctl stop || true
+sudo ovs-dpctl del-dp ovs-system || true
+sudo rmmod openvswitch || true
+sudo systemctl restart NetworkManager || true
+sudo nmcli c down eno1 || true
+sudo nmcli c up eno1 || true
+
+--------------------------------------------------
+Check OVN logs
+--------------------------------------------------
+sudo cat /var/log/ovn-kubernetes/ovnkube.log
+sudo cat /var/log/ovn-kubernetes/ovnkube-master.log
+
+--------------------------------------------------
+POD for testing
+--------------------------------------------------
+kubectl run -it networktest --image=alpine bin/bash --restart=Never --rm
+kubectl delete pod networktest
+
+
+--------------------------------------------------
+Install Docker
+--------------------------------------------------
+sudo dnf remove -y docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-selinux docker-engine-selinux docker-engine
+sudo dnf -y install dnf-plugins-core
+sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+sudo dnf install docker-ce docker-ce-cli containerd.io
+sudo systemctl start docker
+sudo systemctl status docker
+sudo systemctl enable docker
+
+sudo groupadd docker
+sudo gpasswd -a $USER docker
+newgrp docker
+sudo systemctl restart docker
+
+
+--------------------------------------------------
+SKOPEO
+--------------------------------------------------
+skopeo login quay.io
+skopeo inspect docker://alpine:3.12
+skopeo copy docker://alpine:3.12 docker://quay.io/rh_ee_lmilleri/alpine:3.12
+
+--------------------------------------------------
+PODMAN
+--------------------------------------------------
+podman commit infallible_hodgkin my-image
+podman container ls
+podman images
+podman run -it localhost/my-image
+podman push myimage quay.io/username/myimage
+
+--------------------------------------------------
+CNI enabled after cri-o and k8s installation
+--------------------------------------------------
+-rw-r--r--  1 root root 438 Dec 16  2021 100-crio-bridge.conf
+-rw-r--r--  1 root root 292 Jun 30 08:38 10-flannel.conflist
+-rw-r--r--  1 root root  54 Dec 16  2021 200-loopback.conf
+
+--------------------------------------------------
+ENV
+--------------------------------------------------
+export OVN_ROOT=/home/kube/go/src/ovn-kubernetes
+export OVN_IMAGE=quay.io/amorenoz/ovnkube-node:master
+
+--------------------------------------------------
+ip link commands
+-------------------------------------------------
+ip -c link show type bridge
+ip -c link show master cni0
+sudo crictl ps
+sudo ip -all netns exec ip link show
+lsns -p <pid>
+sudo crictl inspect 09b5dac2ea847 | grep pid
+sudo nsenter -t 10538 -n ip addr
+sudo crictl inspect 09b5dac2ea847 | grep netns
+ip netns exec <namespace> ethtool -i net1
+
+
+--------------------------------------------------
+VDPA kernel driver
+-------------------------------------------------
+modprobe vdpa (loads VDPA modules in the kernel)
+modprobe mlx5_vdpa
+modprobe virtio_vdpa
+
+--------------------------------------------------
+VDPA commands
+-------------------------------------------------
+vdpa mgmtdev show
+vdpa dev show -jp
+vdpa dev add name vdpa1 mgmtdev pci/0000:65:00.2
+vdpa dev del vdpa1
+ethtool -i ens1f0np0
+ethtool -K ens1f0np0 hw-tc-offload on
+
+--------------------------------------------------
+TEST HWOL
+-------------------------------------------------
+ovs-vsctl list interface | less
+tcpdump -nei 039b51f2f4203ea
+
+iface-id=default_debug-network-2
+vf-netdev-name=ens1f0v2
+port representor: ff4359946163fc2
+
+iface-id=default_debug-network-1
+vf-netdev-name=ens1f0v3
+port representor: f965e04698a4ed8
+
+ethtool -k ens1f0np0 | grep hw-tc-offload
+./ovnkube-sriov.sh start ens1f0np0
+
+ovs-appctl dpctl/dump-flows -m type=offloaded
+tc filter show dev 44932e2b57f3942 ingress
+
+nc -u 192.168.0.6 4400
+nc -l -u -p 4400
+
+--------------------------------------------------
+SRIOV OPERATOR VDPA configuration
+--------------------------------------------------
+echo "echo 8 > /sys/class/net/ens1f0np0/device/sriov_numvfs" | sudo su
+echo "echo 8 > /sys/class/net/ens1f1np1/device/sriov_numvfs" | sudo su
+modprobe vdpa
+modprobe mlx5_vdpa
+modprobe virtio_vdpa
+/usr/bin/dpdk-devbind.py --bind=mlx5_core 65:00.2 65:00.3 65:00.4 65:00.5 65:00.6 65:00.7 65:01.0 65:01.1
+vdpa dev add name vdpa1 mgmtdev pci/0000:65:00.2
+devlink dev eswitch set  pci/0000:65:00.1 mode switchdev
+
+--------------------------------------------------
+SRIOV OPERATOR
+--------------------------------------------------
+kubectl get sriovnetworknodestates.sriovnetwork.openshift.io -n sriov-network-operator virtlab712.virt.lab.eng.bos.redhat.com -o yaml
+kubectl get SriovOperatorConfig -A
+kubectl get MutatingWebhookConfiguration
+kubectl get ValidatingWebhookConfiguration
+kubectl describe -n sriov-network-operator SriovOperatorConfig  default
+
+kubectl get -n sriov-network-operator SriovOperatorConfig  default -o yaml > /tmp/xxx
+sed 's/true/false/g' /tmp/xxx > /tmp/yyy
+kubectl apply -f /tmp/yyy
+
+kubectl get configmap -n sriov-network-operator device-plugin-config -o yaml
+
+kubectl delete -n sriov-network-operator SriovOperatorConfig  default
+
+--------------------------------------------------
+OFFLOAD
+--------------------------------------------------
+echo 1 > sudo tee /sys/class/net/ens1f0np0/device/sriov_numvfs
+echo 0000:65:00.2 > sudo tee /sys/bus/pci/drivers/mlx5_core/unbind
+sudo devlink dev eswitch set pci/0000:65:00.0 mode switchdev
+nmcli device set ens1f0np0 managed no
+sudo ethtool -K ens1f0np0 hw-tc-offload on
+
+echo 0000:65:00.2 > sudo tee /sys/bus/pci/drivers/mlx5_core/bind
+sudo ethtool -K ens1f0v0 hw-tc-offload on
+nmcli device set ens1f0v0 managed no
+sudo ethtool -K eth0 hw-tc-offload on
+nmcli device set eth0 managed no
+sudo ip link set eth0 up
+sudo ip link set ens1f0np0 up
+
+--------------------------------------------------
+GO
+--------------------------------------------------
+go mod tidy
+go mod vendor
+go mod why -m github.com/...
+go list -m -u -mod=mod github.com/k8snetworkplumbingwg/govdpa
+replace example.com/theirmodule v1.2.3 => example.com/myfork/theirmodule v1.2.3-fixed
+go mod edit -replace=github.com/k8snetworkplumbingwg/govdpa@v0.1.3=github.com/lmilleri/govdpa kvdpa_add_device
+go mod edit -replace=github.com/k8snetworkplumbingwg/govdpa@v0.1.3=github.com/lmilleri/govdpa@v0.1.4
+
+
+--------------------------------------------------
+SRIOV OPERATOR - SRIOV PLUGIN 
+--------------------------------------------------
+SriovNetworkNodePolicy.deviceType: netdevice | vfio-pci
+ConfigMap: drivers ["mlx5_core"], "vdpaType": "virtio"
+
+deviceType: netdevice -> vendor-driver
+deviceType: vfio-pci -> vfio-pci driver
+deviceType: virtio-vdpa -> vendor-driver + virtio-vdpa-driver
+deviceType: vhost-vdpa -> vendor-driver + vhost-vdpa-driver
+Questions: who is setting "mlx5-core" in the configmap?
+utils.go: configSriovDevice function seems interesting
+validate_test.go: implement tests for vdpaType runtime checks
+validate.go: implement runtime checks for vdpaType
+
+--------------------------------------------------
+MLX CONFIG
+--------------------------------------------------
+mst start
+mst status
+mlxconfig -d /dev/mst/mt4125_pciconf0 set SRIOV_EN=1 NUM_OF_VFS=127
+
+--------------------------------------------------
+SRIOV OPERATOR - CODE INSPECTION
+--------------------------------------------------
+sriovnetworknodepolicy_types.go: deviceType attribute
+helper.go: renders the network attachment definition with hardcoded "sriov" CNI
+helper_tester.go:
+- TestRendering: test network attachment definitions
+- TestSriovNetworkNodePolicyApply: test apply policy
+- types.go: add vdpaType to the configmap
+type ResourceConfig struct {
+	ResourcePrefix string           `json:"resourcePrefix,omitempty"` // optional resource prefix that will ovewrite global prefix specified in cli params
+	ResourceName   string           `json:"resourceName"`             // the resource name will be added with resource prefix in K8s api
+	DeviceType     DeviceType       `json:"deviceType,omitempty"`
+	Selectors      *json.RawMessage `json:"selectors,omitempty"`
+	SelectorObj    interface{}
+}
+
+helper_tester.go
+
+
+++<<<<<<< HEAD
+ +      github.com/j-keck/arping v1.0.2
+++=======
++       github.com/juju/errors v0.0.0-20200330140219-3fe23663418f // indirect
++       github.com/juju/testing v0.0.0-20200706033705-4c23f9c453cd // indirect
++       github.com/k8snetworkplumbingwg/govdpa v0.1.3
+++>>>>>>> 131f7325 (sriov: support virtio vdpa devices)
+
+git cherry-pick --no-commit d531392788e9161ba4b01fab13714f0007730124
+git cherry-pick --no-commit 131f7325dcde8050c4c2a6b607743bc5a82a632d
+
+
+
+NetworkNamespace: kube-system
+ResourceName: ovn-kubernetes-a
+
+--------------------------------------------------
+GIT COMMANDS
+--------------------------------------------------
+git tag -d v0.1.0 // delete local tag
+git push origin :tagname // delete remote tag
+git remote -v
+git remote add upstream https://github.com/ovn-org/ovn-kubernetes.git
+git fetch adrian vdpa
+git rebase -Xours adrian vdpa
+
+--------------------------------------------------
+PLAN
+--------------------------------------------------
+- govdpa: add/delete vdpa device (on top of Adrian PR) and submit PR to origin (https://github.com/k8snetworkplumbingwg/govdpa)
+- sriov-network-device-plugin: make it compatible with govdpa
+- sriov-network-operator: planned changes using modified govdpa & sriov-network-device-plugin
+
+
+Need to print out the vdpa device list for both v0.1.3 and v0.1.4 and check for the attributes.
+The aim is to extract the old attributes (GetPath, GetParent and GetType) from the new attributes 
+
+
+old interface:
+type VdpaDevice interface {
+	GetPath() string
+	GetParent() string
+	GetType() VdpaType
+}
+
+--------------------------------------------------
+new format
+--------------------------------------------------
+driver: virtio_vdpa
+name: vdpa0
+busName: pci
+devName: 0000:65:00.3
+path:/sys/devices/pci0000:64/0000:64:00.0/0000:65:00.3
+virtioNet name: virtio0
+virtioNet NetDev: eth0
+
+--------------------------------------------------
+old format
+--------------------------------------------------
+&{name:vdpa0 driver:virtio_vdpa path:/sys/bus/virtio/devices/virtio0 netdev:eth0}
+path: /sys/bus/virtio/devices/virtio0
+parent: vdpa0
+netdev: eth0
+
+--------------------------------------------------
+TEST SRIOV-NETWORK-OPERATOR changes
+--------------------------------------------------
+// build operator image locally
+export IMAGE_TAG=quay.io/rh_ee_lmilleri/sriov-network-operator:latest
+make image
+#podman login quay.io
+podman push quay.io/rh_ee_lmilleri/sriov-network-operator:latest
+
+// build sriov-network-config-daemon image locally
+export IMAGE_TAG=quay.io/rh_ee_lmilleri/sriov-network-config-daemon:latest
+export DOCKERFILE=Dockerfile.sriov-network-config-daemon
+export APP_NAME=sriov-network-config-daemon
+make image
+#podman login quay.io
+podman push quay.io/rh_ee_lmilleri/sriov-network-config-daemon:latest
+
+// build sriov-network-device-plugin image locally
+TAG=quay.io/rh_ee_lmilleri/sriov-network-device-plugin:latest make image
+podman push quay.io/rh_ee_lmilleri/sriov-network-device-plugin:latest
+
+// virtlab: pull images
+sudo podman login -u="rh_ee_lmilleri" -p="3ou4F4QC1LTLXaG6H7AjHIYrC10Up0Y3dCHIKQ+MOLnKr+57n2vQ6HuK/wpbwH23" quay.io
+sudo podman pull quay.io/rh_ee_lmilleri/sriov-network-operator:latest
+sudo podman pull quay.io/rh_ee_lmilleri/sriov-network-config-daemon:latest
+sudo podman pull quay.io/rh_ee_lmilleri/sriov-network-device-plugin:latest
+sudo podman pull quay.io/rh_ee_lmilleri/sriov-network-device-plugin:latest
+
+// deploy custom image for sriov-network-operator
+export SRIOV_NETWORK_OPERATOR_IMAGE=quay.io/rh_ee_lmilleri/sriov-network-operator:latest
+export SRIOV_DEVICE_PLUGIN_IMAGE=quay.io/rh_ee_lmilleri/sriov-network-device-plugin:latest
+export SRIOV_NETWORK_CONFIG_DAEMON_IMAGE=quay.io/rh_ee_lmilleri/sriov-network-config-daemon:latest
+export OVN_IMAGE=quay.io/rh_ee_lmilleri/ovn-daemonset-f:vdpa
+
+
+// Pre-requirements in the server
+sudo vim /usr/lib/systemd/system/openvswitch.service -> add line ExecStartPre=/bin/ovs-vsctl set Open_vSwitch . other_config:hw-offload=true
+sudo systemctl enable openvswitch
+
+systemctl stop openvswitch.service
+rm /etc/openvswitch/conf.db
+systemctl start openvswitch.service
+ovs-vsctl add-br breno1
+ovs-vsctl add-br br-int
+
+#./install-ovs.sh
+./init-cluster.sh
+./install-multus.sh
+./install-ovn.sh
+
+
+pushd /home/kube/go/src/sriov-network-operator
+---- wait until all containers are running ----
+make deploy-setup-k8s
+kubectl get -n sriov-network-operator SriovOperatorConfig  default -o yaml > /tmp/xxx
+sed -i 's/enableInjector: true/enableInjector: false/g' /tmp/xxx
+sed -i 's/enableOperatorWebhook: true/enableOperatorWebhook: false/g' /tmp/xxx
+echo "  enableOvsOffload: true" >> /tmp/xxx
+kubectl apply -f /tmp/xxx
+
+popd
+// check the node status before applying the policy
+kubectl get sriovnetworknodestates.sriovnetwork.openshift.io -n sriov-network-operator virtlab712.virt.lab.eng.bos.redhat.com -o yaml
+// check configmap before applying the policy, resourceList should be null
+kubectl get configmap -n sriov-network-operator device-plugin-config -o yaml
+// check network-attachment-definitions, it should be empty
+kubectl get network-attachment-definitions -A
+kubectl apply -f policy1.yaml
+<wait for reboot>
+<sriov-device-plugin doesn't start> -> sudo podman login quay.io
+kubectl apply -f netAttach-sriov-mlxnics-a.yaml
+kubectl apply -f netAttach-sriov-mlxnics-b.yaml
+kubectl apply -f debug-network.yaml
+
+// uninstall operator
+pushd /home/kube/go/src/sriov-network-operator
+make undeploy-k8s
+popd
+// restart as done above
+
+
+PRs
+webhook: not compulsory. 
+operator: configure OVS, switchdev, VFs, etc
+
+
+
+
+golang.org/x/net v0.0.0-20220526153639-5463443f8c37
+	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a
+	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8
+	gopkg.in/fsnotify/fsnotify.v1 v1.4.7
+Adrian Moreno Zapata11:28 AM
+go get {repo}@{hash}
+You11:28 AM
+replace github.com/k8snetworkplumbingwg/govdpa v0.1.3 => github.com/lmilleri/govdpa v0.1.9
+Adrian Moreno Zapata11:31 AM
+go get github.com/lmilleri/govdpa@0819d1441498500f1096f8254634cca0dac386c3
+Adrian Moreno Zapata11:34 AM
+github.com/k8snetworkplumbingwg/govdpa => github.com/lmilleri/govdpa v0.0.0-20200626054723-0819d1441498
+https://github.com/lmilleri/govdpa/commit/0819d1441498500f1096f8254634cca0dac386c3
+go mod tidy
+go: github.com/k8snetworkplumbingwg/govdpa@v0.1.3 (replaced by github.com/lmilleri/govdpa@v0.0.0-20200626054723-0819d1441498): pseudo-version "v0.0.0-20200626054723-0819d1441498" invalid: does not match version-control timestamp (expected 20220823171229)
+go: downloading github.com/lmilleri/govdpa v0.0.0-20200626054723-0819d1441498
+go: github.com/k8snetworkplumbingwg/govdpa@v0.1.3 (replaced by github.com/lmilleri/govdpa@v0.0.0-20200626054723-0819d1441498): pseudo-version "v0.0.0-20200
+
+testing govdpa: 
+1. virtlab with hw resources
+2. mocking: file system
+
+
+https://github.com/Mellanox/sriovnet/blob/master/sriovnet_test.go
+mocking file system: https://github.com/spf13/afero
+https://github.com/k8snetworkplumbingwg/sriov-network-device-plugin/blob/master/pkg/netdevice/pciNetDevice_test.go
+
+testing pipeline:
+https://github.com/amorenoz/govdpa/blob/vdpamgt_netlink/.github/workflows/ci.yml
+https://github.com/amorenoz/govdpa/actions
+
+
+--------------------------------------------------
+OPERATOR PROVISIONING SEQUENCE
+--------------------------------------------------
+daemon.nodeStateSyncHandler
+- enablePlugins (k8s plugin and generic plugin? Check the operator logs)
+- for each plugin calls OnNodeStateAdd or OnNodeStateChange
+- for each plugin != GenericPluginName calls Apply
+- for generic plugin calls apply
+- reboot node if needed
+
+
+K8sPlugin.apply
+- updateSwitchdevService
+	enable service switchdevBeforeNMService
+	enable service switchdevAfterNMService
+	some write files ...
+	
+- for each systemService -> updateSystemService
+
+Generic Plugin.apply
+- checks desired state and last state
+- calls utils.go->SyncNodeState
+- if not SkipConfigVf && needUpdate
+	configSriovDevice
+
+useful functions:
+- LoadKernelModule
+modprobe, rmmod
+
+enabled plugins [mellanox_plugin k8s_plugin generic_plugin]
+sequence: 
+	mellanox_plugin
+		OnNodeStateChange
+	k8s_plugin
+		OnNodeStateChange
+	generic_plugin
+		OnNodeStateChange
+	mellanox_plugin
+		Apply
+	k8s_plugin
+		Apply
+	generic_plugin
+		Apply
+
+--------------------------------------------------
+Meetings
+--------------------------------------------------
+- NPWG
+- OpenShift Multus + SR-IOV Weekly
+- Network HW Enablement sync up
+- Sync Mellanox + RedHat (RDMA, GPUDirect, ...)
+
+--------------------------------------------------
+Systemd services
+--------------------------------------------------
+switchdev-configuration-before-nm.service
+switchdev-configuration-after-nm.service
+sudo systemctl disable switchdev-configuration-after-nm.service
+
+--------------------------------------------------
+Openvswitch commands
+-------------------------------------------------
+sudo ovs-vsctl list interface | less
+sudo ovs-vsctl show
+sudo ovs-ofctl show br-int
+sudo ovs-ofctl dump-aggregate br-int
+sudo ovs-vsctl list-ports br-int
+
+--------------------------------------------------
+Build OVN IMAGE
+--------------------------------------------------
+cd ovn-kubernetes/dist/images
+pushd ../../go-controller
+make
+popd
+find ../../go-controller/_output/go/bin/ -maxdepth 1 -type f -exec cp -f {} . \;
+echo "ref: $(git rev-parse  --symbolic-full-name HEAD)  commit: $(git rev-parse  HEAD)" > git_info
+
+OVN_IMAGE=quay.io/rh_ee_lmilleri/ovn-daemonset-f:vdpa
+buildah bud -t $OVN_IMAGE -f Dockerfile.fedora .
+podman login -u="rh_ee_lmilleri" -p="3ou4F4QC1LTLXaG6H7AjHIYrC10Up0Y3dCHIKQ+MOLnKr+57n2vQ6HuK/wpbwH23" quay.io
+podman push $OVN_IMAGE
+
+
+--------------------------------------------------
+SECRET
+--------------------------------------------------
+kubectl create -f rh-ee-lmilleri-secret.yaml --namespace=sriov-network-operator
+
+
+kubectl exec -it -n ovn-kubernetes ovnkube-master-7ff855fdd6-nm5bc -c northd -- ovn-nbctl ls-list 
+kubectl exec -it -n ovn-kubernetes ovnkube-master-7ff855fdd6-nm5bc
+kubectl exec -it -n ovn-kubernetes ovnkube-master-7ff855fdd6-nm5bc bash
+kubectl describe pod -n ovn-kubernetes ovnkube-master-7ff855fdd6-nm5bc
+kubectl exec -it -n ovn-kubernetes ovnkube-master-7ff855fdd6-nm5bc -c ovn-northd -- ovn-nbctl ls-list
+kubectl exec -it -n ovn-kubernetes ovnkube-master-7ff855fdd6-nm5bc -c ovn-northd -- ovn-nbctl lr-list
+kubectl exec -it -n ovn-kubernetes ovnkube-master-7ff855fdd6-nm5bc -c ovn-nbctl show
+kubectl exec -it -n ovn-kubernetes ovnkube-master-7ff855fdd6-nm5bc -c ovn-northd -- ovn-nbctl show 
+

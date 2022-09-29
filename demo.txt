@@ -1,0 +1,79 @@
+--------------------------
+demo
+--------------------------
+
+--- Pre-Requirements ---
+openvswitch service ractive and enabled (hw-offload=true)
+k8s cluster running (with multus, ovn-K cni and sriov-network-operator)
+
+--- show pods running ---
+kubectl get pods -A
+
+--- show nic state pci/0000:65:00.0 pci/0000:65:00.1 ---
+mst status -v
+devlink dev eswitch show pci/0000:65:00.1
+devlink dev info pci/0000:65:00.1
+ls -la /sys/class/net/ens1f0np0/device/driver
+ls -la /sys/class/net/ens1f0np0/device/ | grep sriov
+
+--- check vdpa ---
+vdpa dev show -jp
+lsmod | grep vdpa
+
+--- show ip link ---
+ip link
+
+
+--- show operator config ---
+kubectl get -n sriov-network-operator SriovOperatorConfig  default -o yaml
+spec:
+  disableDrain: true
+  enableInjector: false
+  enableOperatorWebhook: false
+  enableOvsOffload: true
+  logLevel: 2
+
+
+--- show network node state ---
+kubectl get sriovnetworknodestates.sriovnetwork.openshift.io -n sriov-network-operator virtlab712.virt.lab.eng.bos.redhat.com -o yaml
+
+--- show device plugin config map ---
+kubectl get configmap -n sriov-network-operator device-plugin-config -o yaml
+
+--- check network-attachment-definitions (should not be present) ---
+kubectl get network-attachment-definitions -A
+kubectl delete network-attachment-definitions -n kube-system ovn-kubernetes-a
+kubectl delete network-attachment-definitions -n kube-system ovn-kubernetes-b
+
+
+--- create network attachment ---
+cd /home/kube/dev/ovn-k8s
+kubectl apply -f netAttach-sriov-mlxnics-a.yaml
+kubectl apply -f netAttach-sriov-mlxnics-b.yaml
+
+--- apply policy ---
+kubectl apply -f policy1.yaml
+
+
+--- waiting for reboot ---
+
+--- show ip link and created VFs ---
+
+--- show allocated resources by device plugin ---
+kubectl get node virtlab712.virt.lab.eng.bos.redhat.com -o json | jq '.status.allocatable'
+tree /var/run/k8s.cni.cncf.io/devinfo/
+
+--- show vdpa interfaces and port representors ---
+ethtool -i ethx
+
+--- run pods ---
+kubectl apply -f debug-network.yaml
+
+--- check connectivity between pods ---
+
+--- check pod interface drivers ---
+kubectl exec -it debug-network-1 -- ip link show eth0
+
+
+
+
