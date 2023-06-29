@@ -1,0 +1,8 @@
+<pool type='dir'>
+  <name>openshift</name>
+  <source>
+  </source>
+  <target>
+    <path>/home/kcli/images</path>
+  </target>
+</pool>

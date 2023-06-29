@@ -1,0 +1,9 @@
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  labels:
+    machineconfiguration.openshift.io/role: worker
+  name: worker-osoverride
+
+spec:
+  osImageURL: quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:cd4151f0b3e5d51c7b582446d6ea5de06d8afab76ebfcf50c9260e63bafd7591       

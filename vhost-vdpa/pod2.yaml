@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vdpa-pod2
+  namespace: vdpa
+  annotations:
+    k8s.v1.cni.cncf.io/networks: vdpa/ovn-kubernetes-a
+spec:
+  containers:
+  - name: debug-network-pod
+    image: quay.io/rh_ee_lmilleri/alpine:latest
+    imagePullPolicy: IfNotPresent
+    securityContext:
+      privileged: true
+    command:
+      - sleep
+      - "3600"
