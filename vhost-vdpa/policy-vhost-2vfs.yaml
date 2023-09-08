@@ -17,4 +17,3 @@ spec:
   eSwitchMode: switchdev
   deviceType: netdevice
   vdpaType: vhost
-  #vdpaType: virtio

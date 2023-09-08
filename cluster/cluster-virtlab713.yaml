@@ -1,0 +1,17 @@
+cluster: vdpa
+domain: test-vhost-vdpa.corp
+network: sriov-net
+pool: openshift
+api_ip: 10.19.157.66
+pull_secret: openshift_pull.json
+tag: 4.14
+#version: nightly
+version: ci
+
+#ctlplane: 3
+#workers: 0
+#numcpus: 16
+#disk_size: 60
+#memory: 28672
+#bootstrap_memory: 16384
+#network_type: OVNKubernetes

@@ -1,14 +1,14 @@
 apiVersion: sriovnetwork.openshift.io/v1
 kind: SriovNetworkNodePolicy
 metadata:
-  name: policy
+  name: policy-virtio
   namespace: openshift-sriov-network-operator
 spec:
   nodeSelector:
     feature.node.kubernetes.io/network-sriov.capable: "true"
-  resourceName: mlxnics
+  resourceName: mlxnicsvirtio
   priority: 5
-  numVfs: 2
+  numVfs: 1
   nicSelector:
       deviceID: "101d"
       rootDevices:
@@ -16,5 +16,4 @@ spec:
       vendor: "15b3"
   eSwitchMode: switchdev
   deviceType: netdevice
-  vdpaType: vhost
-  #vdpaType: virtio
+  vdpaType: virtio

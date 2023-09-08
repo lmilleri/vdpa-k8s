@@ -1,0 +1,6 @@
+*.ign
+cluster/coreos-installer
+cluster/openshift-install
+cluster/openshift_pull.json
+cluster/pull-secret.txt
+

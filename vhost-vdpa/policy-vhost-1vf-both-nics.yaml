@@ -8,13 +8,12 @@ spec:
     feature.node.kubernetes.io/network-sriov.capable: "true"
   resourceName: mlxnics
   priority: 5
-  numVfs: 2
+  numVfs: 1
   nicSelector:
       deviceID: "101d"
-      rootDevices:
-        - 0000:65:00.0
+      #rootDevices:
+        #- 0000:65:00.0
       vendor: "15b3"
   eSwitchMode: switchdev
   deviceType: netdevice
   vdpaType: vhost
-  #vdpaType: virtio

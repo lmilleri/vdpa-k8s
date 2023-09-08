@@ -78,6 +78,11 @@ pei "oc get pods --all-namespaces | grep -v \"Running\" | grep -v \"Completed\""
 delay_1s
 delay_1s
 
+pei "oc label node virtlab711.virt.lab.eng.bos.redhat.com node-role.kubernetes.io/mcp-offloading-"
+pei " oc label node virtlab711.virt.lab.eng.bos.redhat.com feature.node.kubernetes.io/network-sriov.capable-"
+pei "oc label node virtlab712.virt.lab.eng.bos.redhat.com node-role.kubernetes.io/mcp-offloading-"
+pei " oc label node virtlab712.virt.lab.eng.bos.redhat.com feature.node.kubernetes.io/network-sriov.capable-"
+
 p "create the MachineConfigPool:"
 pei "cat mcp-offloading.yaml"
 delay_sec 2
@@ -85,16 +90,18 @@ pei "oc create -f mcp-offloading.yaml"
 delay_1s
 delay_1s
 
-p "label the worker node to be part of the pool:"
+p "label the worker nodes to be part of the pool:"
 delay_1s
-pei "oc label node virtlab711.virt.lab.eng.bos.redhat.com node-role.kubernetes.io/mcp-offloading=\"\""
-delay_1s
+#pei "oc label node virtlab711.virt.lab.eng.bos.redhat.com node-role.kubernetes.io/mcp-offloading=\"\""
+#delay_1s
+pei "oc label node virtlab712.virt.lab.eng.bos.redhat.com node-role.kubernetes.io/mcp-offloading=\"\""
 delay_1s
 
-p "label the worker node as a SRIOV capable node:"
+p "label the worker nodes as a SRIOV capable node:"
 delay_1s
-pei "oc label node virtlab711.virt.lab.eng.bos.redhat.com feature.node.kubernetes.io/network-sriov.capable=true"
-delay_1s
+#pei "oc label node virtlab711.virt.lab.eng.bos.redhat.com feature.node.kubernetes.io/network-sriov.capable=true"
+#delay_1s
+pei "oc label node virtlab712.virt.lab.eng.bos.redhat.com feature.node.kubernetes.io/network-sriov.capable=true"
 delay_1s
 
 p "create the SRIOV network pool configuration and enable OVS HW offloading."
@@ -120,17 +127,17 @@ delay_1s
 pei "cat policy.yaml"
 delay_sec 2
 
-p "let's find out which is the netdevice associated to the PCI device 0000:65:00.0:"
-delay_1s
-pei "ssh virtlab711 \"ls -la /sys/bus/pci/devices/0000\:65\:00.0/net\""
-delay_1s
-delay_1s
+#p "let's find out which is the netdevice associated to the PCI device 0000:65:00.0:"
+#delay_1s
+#pei "ssh virtlab711 \"ls -la /sys/bus/pci/devices/0000\:65\:00.0/net\""
+#delay_1s
+#delay_1s
 
-p "there are no VFs yet:"
-delay_1s
-pei "ssh virtlab711 \"ip link show ens1f0\""
-delay_1s
-delay_1s
+#p "there are no VFs yet:"
+#delay_1s
+#pei "ssh virtlab711 \"ip link show ens1f0\""
+#delay_1s
+#delay_1s
 
 # p "state of the SRIOV-network-operator before applying the policy:"
 # delay_1s
@@ -155,11 +162,12 @@ delay_1s
 #pei "oc get sriovnetworknodestates.sriovnetwork.openshift.io -n openshift-sriov-network-operator virtlab711.virt.lab.eng.bos.redhat.com -o yaml"
 #delay_sec 10
 
-p "let's check if the VFs have been created properly:"
-delay_1s
-pei "ssh virtlab711 \"ip link show ens1f0\""
-delay_1s
-delay_1s
+#p "let's check if the VFs have been created properly:"
+#delay_1s
+#pei "ssh virtlab711 \"ip link show ens1f0\""
+#delay_1s
+#pei "ssh virtlab712 \"ip link show ens1f0\""
+#delay_1s
 
 #p "let's check the number of VFs:"
 #delay_1s
@@ -167,51 +175,54 @@ delay_1s
 #delay_1s
 #delay_1s
 
-p "let's check the newly created vDPA devices:"
-delay_1s
-pei "ssh virtlab711 \"vdpa dev show\""
-delay_1s
-delay_1s
+#p "let's check the newly created vDPA devices:"
+#delay_1s
+#pei "ssh virtlab711 \"vdpa dev show\""
+#delay_1s
+#pei "ssh virtlab712 \"vdpa dev show\""
+#delay_1s
 
-p "the NIC mode should be switchdev:"
-delay_1s
-pei "ssh virtlab711 \"sudo devlink dev eswitch show pci/0000:65:00.0\""
-delay_1s
-delay_1s
+#p "the NIC mode should be switchdev:"
+#delay_1s
+#pei "ssh virtlab711 \"sudo devlink dev eswitch show pci/0000:65:00.0\""
+#delay_1s
+#pei "ssh virtlab712 \"sudo devlink dev eswitch show pci/0000:65:00.0\""
+#delay_1s
 
-p "the NIC should have HW offload enabled:"
-delay_1s
-pei "ssh virtlab711 \"ethtool -k ens1f0 | grep hw-tc-offload\""
-delay_1s
-delay_1s
+#p "the NIC should have HW offload enabled:"
+#delay_1s
+#pei "ssh virtlab711 \"ethtool -k ens1f0 | grep hw-tc-offload\""
+#delay_1s
+#pei "ssh virtlab712 \"ethtool -k ens1f0 | grep hw-tc-offload\""
+#delay_1s
 
-p "please note that all the interfaces presented below, belongs to the worker node (virtlab711)"
-p "so the traffic will flow between those interfaces on the same worker node (loopback on the NIC card)"
-delay_1s
-delay_1s
-p "eth0 and eth1 are the port representors (switchdev mode) and they are members of the OVS bridge:"
-delay_1s
-pei "ssh virtlab711 \"ethtool -i eth0\""
-delay_sec 2
-pei "ssh virtlab711 \"ethtool -i eth1\""
-delay_sec 2
+#p "please note that all the interfaces presented below, belongs to the worker node (virtlab711)"
+#p "so the traffic will flow between those interfaces on the same worker node (loopback on the NIC card)"
+#delay_1s
+#delay_1s
+#p "eth0 and eth1 are the port representors (switchdev mode) and they are members of the OVS bridge:"
+#delay_1s
+#pei "ssh virtlab711 \"ethtool -i eth0\""
+#delay_sec 2
+#pei "ssh virtlab711 \"ethtool -i eth1\""
+#delay_sec 2
 
-p "device info files are created under the directory /var/run/k8s.cni.cncf.io/devinfo/dp"
-p "these files contain info that is shared between kubelet and plugins in kubernetes:"
-delay_1s
-pei "ssh virtlab711 \"ls -la /var/run/k8s.cni.cncf.io/devinfo/dp\""
-delay_1s
-delay_1s
-pei "ssh virtlab711 \"cat /var/run/k8s.cni.cncf.io/devinfo/dp/openshift.io-mlxnics-0000:65:00.2-device.json | jq\""
-delay_1s
-delay_1s
-delay_1s
+#p "device info files are created under the directory /var/run/k8s.cni.cncf.io/devinfo/dp"
+#p "these files contain info that is shared between kubelet and plugins in kubernetes:"
+#delay_1s
+#pei "ssh virtlab711 \"ls -la /var/run/k8s.cni.cncf.io/devinfo/dp\""
+#delay_1s
+#delay_1s
+#pei "ssh virtlab711 \"cat /var/run/k8s.cni.cncf.io/devinfo/dp/openshift.io-mlxnics-0000:65:00.2-device.json | jq\""
+#delay_1s
+#delay_1s
+#delay_1s
 
 p "create the network attachment definition:"
 delay_1s
-pei "cat network-attach-2nd-if.yaml"
+pei "cat nad-test.yaml"
 delay_sec 2
-pei "oc create -f network-attach-2nd-if.yaml"
+pei "oc create -f nad-test.yaml"
 delay_1s
 delay_1s
 
@@ -241,8 +252,6 @@ p "check first pod:"
 delay_1s
 pei "oc exec -it -n vdpa vdpa-pod1 -- ip link"
 delay_sec 2
-pei "oc exec -it -n vdpa vdpa-pod1 -- ip a"
-delay_sec 5
 
 
 p "check second pod:"

@@ -1,0 +1,11 @@
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  labels:
+    machineconfiguration.openshift.io/role: worker
+  name: worker-kernelarg-hugepages
+spec:
+  kernelArguments:
+    - default_hugepagesz=1G
+    - hugepagesz=1G
+    - hugepages=6
