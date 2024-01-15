@@ -22,6 +22,6 @@ spec:
       - bridge: vdpa-br
         localnet: l2-network
         state: present
-    ovs-db:
-      external_ids:
-        dumb-thing-you-need-todo-because: OCPBUGS-18869
+    #ovs-db:
+      #external_ids:
+        #dumb-thing-you-need-todo-because: OCPBUGS-18869

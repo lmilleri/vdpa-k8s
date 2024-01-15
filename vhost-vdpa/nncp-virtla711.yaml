@@ -23,6 +23,6 @@ spec:
         localnet: l2-network
         state: present
         #state: ignore
-    ovs-db:
-      external_ids:
-        dumb-thing-you-need-todo-because: OCPBUGS-18869
+    #ovs-db:
+      #external_ids:
+        #dumb-thing-you-need-todo-because: OCPBUGS-18869

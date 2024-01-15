@@ -1,0 +1,17 @@
+apiVersion: sriovnetwork.openshift.io/v1
+kind: SriovNetworkNodePolicy
+metadata:
+  name: policy
+  namespace: openshift-sriov-network-operator
+spec:
+  nodeSelector:
+    feature.node.kubernetes.io/network-sriov.capable: "true"
+  resourceName: mlxnics
+  priority: 5
+  numVfs: 2
+  nicSelector:
+      deviceID: "101d"
+      vendor: "15b3"
+  eSwitchMode: switchdev
+  deviceType: netdevice
+  vdpaType: vhost

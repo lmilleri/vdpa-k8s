@@ -5,4 +5,4 @@ spec:
       - name: network-operator
         env:
         - name: OVN_IMAGE
-          value: quay.io/rh_ee_lmilleri/ovn-daemonset-f:vhost-vdpa-1909
+          value: quay.io/rh_ee_lmilleri/ovn-daemonset-f:vhost-vdpa-0911
