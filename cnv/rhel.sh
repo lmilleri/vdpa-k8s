@@ -1,0 +1,30 @@
+/usr/bin/qemu-kvm \
+-name 'L1'  \
+-sandbox on  \
+-machine q35,memory-backend=mem-machine_mem \
+-device pcie-root-port,id=pcie-root-port-0,multifunction=on,bus=pcie.0,addr=0x1,chassis=1 \
+-device pcie-pci-bridge,id=pcie-pci-bridge-0,addr=0x0,bus=pcie-root-port-0  \
+-nodefaults \
+-device VGA,bus=pcie.0,addr=0x2 \
+-m 29696 \
+-object memory-backend-ram,size=29696M,id=mem-machine_mem  \
+-smp 32,maxcpus=32,cores=16,threads=1,dies=1,sockets=2  \
+-cpu 'Cascadelake-Server',ss=on,vmx=on,pdcm=on,hypervisor=on,tsc-adjust=on,umip=on,pku=on,md-clear=on,stibp=on,arch-capabilities=on,xsaves=on,ibpb=on,ibrs=on,amd-stibp=on,amd-ssbd=on,rdctl-no=on,ibrs-all=on,skip-l1dfl-vmentry=on,mds-no=on,pschange-mc-no=on,tsx-ctrl=on,hle=off,rtm=off,kvm_pv_unhalt=on \
+-device pcie-root-port,id=pcie-root-port-1,port=0x1,addr=0x1.0x1,bus=pcie.0,chassis=2 \
+-device qemu-xhci,id=usb1,bus=pcie-root-port-1,addr=0x0 \
+-device usb-tablet,id=usb-tablet1,bus=usb1.0,port=1 \
+-device pcie-root-port,id=pcie-root-port-2,port=0x2,addr=0x1.0x2,bus=pcie.0,chassis=3 \
+-device virtio-scsi-pci,id=virtio_scsi_pci0,bus=pcie-root-port-2,addr=0x0 \
+-blockdev node-name=file_image1,driver=file,auto-read-only=on,discard=unmap,aio=threads,filename=/tmp/L1.qcow2,cache.direct=on,cache.no-flush=off \
+-blockdev node-name=drive_image1,driver=qcow2,read-only=off,cache.direct=on,cache.no-flush=off,file=file_image1 \
+-device scsi-hd,id=image1,drive=drive_image1,write-cache=on \
+-device pcie-root-port,id=pcie-root-port-3,port=0x3,addr=0x1.0x3,bus=pcie.0,chassis=4 \
+-device virtio-net-pci,id=net0,netdev=hostnet0,bus=pcie-root-port-3,addr=0x0  \
+-netdev vhost-vdpa,id=hostnet0,vhostdev=/dev/vhost-vdpa-0 \
+-vnc :1  \
+-rtc base=utc,clock=host,driftfix=slew  \
+-boot menu=off,order=cdn,once=c,strict=off \
+-enable-kvm \
+-device pcie-root-port,id=pcie_extra_root_port_0,multifunction=on,bus=pcie.0,addr=0x3,chassis=8 \
+-monitor stdio \
+-qmp tcp:0:5555,server,nowait \

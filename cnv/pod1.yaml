@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vdpa-pod1
+  #namespace: vdpa
+  annotations:
+    k8s.v1.cni.cncf.io/networks: vdpa-network
+    #v1.multus-cni.io/default-network: vdpa-network
+spec:
+  containers:
+  - name: debug-network-pod
+    image: quay.io/rh_ee_lmilleri/alpine:dpdk
+    imagePullPolicy: IfNotPresent
+    #securityContext:
+      #privileged: true
+    command:
+      - sleep
+      - "3600"
+    resources:
+      requests:
+        kubevirt.io/sriov_net: '1'
+      limits:
+        kubevirt.io/sriov_net: '1'

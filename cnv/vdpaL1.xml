@@ -1,0 +1,4 @@
+<interface type='vdpa'>
+  <source dev='/dev/vhost-vdpa-0' network='default'/>
+  <address type='pci' domain='0x0000' bus='0x00' slot='0x07' function='0x0'/>
+</interface>
